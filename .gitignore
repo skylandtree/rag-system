@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+milvus_data/
+.DS_Store
+*.db
+*.db.lock
+计算机论文集/
+.cc-history/
+res/*.pdf
+res/**/*.pdf

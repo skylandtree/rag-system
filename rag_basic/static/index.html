@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>行政大脑引擎</title>
+	<style>
+	  /* ============ Reset & Base ============ */
+	  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+	  :root {
+	    --sidebar-bg: #0d0d14;
+	    --sidebar-hover: #1a1a26;
+	    --sidebar-active: #252536;
+	    --sidebar-text: #6b6b80;
+	    --sidebar-text-active: #e0e0f0;
+	    --sidebar-width: 260px;
+	    --main-bg: #0a0a0f;
+	    --msg-user-bg: rgba(0,212,255,0.06);
+	    --msg-text: #d0d0e0;
+	    --msg-text-muted: #6b6b85;
+	    --input-bg: rgba(255,255,255,0.03);
+	    --input-border: #2a2a45;
+	    --input-focus-border: #00d4ff;
+	    --accent: #00d4ff;
+	    --accent-hover: #33ddff;
+	    --accent-glow: rgba(0,212,255,0.15);
+	    --accent-purple: #7c3aed;
+	    --danger: #ff4466;
+	    --border-subtle: #1e1e35;
+	    --border-light: #252540;
+	    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+	    --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
+	    --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
+	    --neon-glow: 0 0 20px rgba(0,212,255,0.15);
+	    --glass-bg: rgba(255,255,255,0.03);
+	    --glass-border: rgba(255,255,255,0.06);
+	    --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', system-ui, sans-serif;
+	    --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+	  }
+	  html, body { height: 100%; }
+	  body {
+	    font-family: var(--font-sans);
+	    background:
+	      radial-gradient(ellipse at 20% 50%, rgba(0,212,255,0.04) 0%, transparent 50%),
+	      radial-gradient(ellipse at 80% 20%, rgba(124,58,237,0.04) 0%, transparent 50%),
+	      var(--main-bg);
+	    color: var(--msg-text);
+	    display: flex;
+	    overflow: hidden;
+	    -webkit-font-smoothing: antialiased;
+	  }
+	  ::-webkit-scrollbar { width: 4px; }
+	  ::-webkit-scrollbar-track { background: transparent; }
+	  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+	  .sidebar {
+	    width: var(--sidebar-width);
+	    min-width: var(--sidebar-width);
+	    background: var(--sidebar-bg);
+	    display: flex;
+	    flex-direction: column;
+	    border-right: 1px solid rgba(255,255,255,0.06);
+	    z-index: 100;
+	    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+	  }
+	  .sidebar-header {
+	    padding: 18px 16px 14px;
+	    display: flex;
+	    align-items: center;
+	    gap: 10px;
+	  }
+	  .sidebar-header .logo {
+	    width: 30px; height: 30px;
+	    background: linear-gradient(135deg, #00d4ff, #7c3aed);
+	    border-radius: 8px;
+	    display: flex; align-items: center; justify-content: center;
+	    font-size: 15px; flex-shrink: 0;
+	    box-shadow: 0 0 16px rgba(0,212,255,0.2);
+	    animation: neonPulse 2s ease-in-out infinite;
+	  }
+	  .sidebar-header h1 {
+	    font-size: 14px; font-weight: 600;
+	    background: linear-gradient(135deg, #00d4ff, #a78bfa);
+	    -webkit-background-clip: text;
+	    -webkit-text-fill-color: transparent;
+	    letter-spacing: 0.5px;
+	  }
+	  .sidebar-actions { padding: 8px 12px 4px; }
+	  .new-chat-btn {
+	    width: 100%; padding: 9px;
+	    border: 1px solid var(--glass-border); border-radius: 8px;
+	    background: var(--glass-bg); color: var(--sidebar-text);
+	    font-size: 13px; font-weight: 500; font-family: inherit;
+	    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+	    transition: all 0.15s; box-shadow: var(--shadow-sm);
+	    backdrop-filter: blur(8px);
+	  }
+	  .new-chat-btn:hover {
+	    background: rgba(0,212,255,0.06); border-color: rgba(0,212,255,0.3);
+	    color: var(--accent); box-shadow: var(--neon-glow);
+	  }
+	  .conversation-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
+	  .conv-item {
+	    padding: 10px 12px; border-radius: 8px; cursor: pointer;
+	    font-size: 13px; color: var(--sidebar-text);
+	    display: flex; align-items: center; gap: 8px;
+	    transition: all 0.12s; margin-bottom: 1px; position: relative;
+	  }
+	  .conv-item:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); }
+	  .conv-item.active { background: var(--sidebar-active); color: var(--sidebar-text-active); font-weight: 500; border-left: 2px solid var(--accent); padding-left: 10px; }
+	  .conv-item .conv-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	  .conv-item .conv-delete {
+	    opacity: 0; background: none; border: none; color: var(--sidebar-text);
+	    cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 4px;
+	    transition: all 0.12s; flex-shrink: 0;
+	  }
+	  .conv-item:hover .conv-delete { opacity: 0.6; }
+	  .conv-item .conv-delete:hover { opacity: 1 !important; color: var(--danger); background: rgba(239,68,68,0.08); }
+	  .sidebar-footer {
+	    padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.06);
+	    display: flex; align-items: center; gap: 10px;
+	    font-size: 13px; color: var(--sidebar-text);
+	  }
+	  .sidebar-footer .avatar {
+	    width: 26px; height: 26px; border-radius: 50%;
+	    background: linear-gradient(135deg, #00d4ff, #7c3aed); display: flex; align-items: center; justify-content: center;
+	    font-size: 13px; flex-shrink: 0;
+	    box-shadow: 0 0 10px rgba(0,212,255,0.2);
+	  }
+
+	  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--main-bg); }
+	  .sidebar-toggle {
+	    display: none; position: fixed; top: 12px; left: 12px; z-index: 200;
+	    width: 36px; height: 36px; background: var(--main-bg);
+	    border: 1px solid var(--border-subtle); border-radius: 8px;
+	    color: var(--sidebar-text); cursor: pointer; align-items: center; justify-content: center;
+	    font-size: 18px; box-shadow: var(--shadow-sm);
+	  }
+	  .messages { flex: 1; overflow-y: auto; padding: 0; }
+	  .messages-inner {
+	    max-width: 760px; margin: 0 auto; padding: 0 24px;
+	    min-height: 100%; display: flex; flex-direction: column;
+	  }
+	  .messages-inner .message:first-of-type {
+	    padding-top: 40px;
+	  }
+
+	  .empty-state {
+	    display: flex; flex-direction: column; align-items: center; justify-content: center;
+	    flex: 1; text-align: center; padding: 60px 24px;
+	  }
+	  .empty-state .icon { font-size: 48px; margin-bottom: 20px; opacity: 0.85; }
+	  .empty-state h2 {
+	    font-size: 24px; font-weight: 700;
+	    background: linear-gradient(135deg, #00d4ff, #a78bfa);
+	    -webkit-background-clip: text;
+	    -webkit-text-fill-color: transparent;
+	    margin-bottom: 8px; letter-spacing: 1px;
+	  }
+	  .empty-state p {
+	    font-size: 14px; color: var(--msg-text-muted); max-width: 400px; line-height: 1.6;
+	  }
+	  .empty-state .suggestions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 28px; }
+	  .empty-state .suggestions button {
+	    background: var(--glass-bg); border: 1px solid var(--glass-border);
+	    color: var(--sidebar-text); padding: 8px 18px; border-radius: 20px;
+	    cursor: pointer; font-size: 13px; font-weight: 500; font-family: inherit;
+	    transition: all 0.2s; box-shadow: var(--shadow-sm);
+	    backdrop-filter: blur(8px);
+	  }
+	  .empty-state .suggestions button:hover {
+	    border-color: var(--accent); color: var(--accent);
+	    background: rgba(0,212,255,0.06); box-shadow: var(--neon-glow);
+	  }
+
+	  .message { display: flex; gap: 16px; margin-bottom: 28px; animation: msgIn 0.25s ease; }
+	  @keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+	  .message .avatar {
+	    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+	    display: flex; align-items: center; justify-content: center;
+	    font-size: 14px; margin-top: 2px;
+	  }
+	  .message.user .avatar { background: var(--accent); color: #fff; }
+	  .message.bot .avatar { background: #1c1c1e; border: 1px solid rgba(255,255,255,0.1); }
+	  .message .content { flex: 1; min-width: 0; line-height: 1.7; font-size: 14.5px; color: var(--msg-text); }
+	  .message.user .content {
+	    background: rgba(0,212,255,0.06); padding: 12px 18px; border-radius: 14px;
+	    max-width: 70%; margin-left: auto; border-bottom-right-radius: 4px; color: #e0e0f0;
+	    backdrop-filter: blur(10px);
+	    border: 1px solid rgba(0,212,255,0.1);
+	    box-shadow: 0 0 12px rgba(0,212,255,0.05);
+	  }
+	  .message.bot .content { padding-top: 4px; }
+	  .message.bot .content p { margin-bottom: 10px; }
+	  .message.bot .content p:last-child { margin-bottom: 0; }
+	  .message.bot .content code {
+	    background: #1a1a2e; padding: 2px 7px; border-radius: 5px;
+	    font-size: 13px; font-family: var(--font-mono); color: #00d4ff;
+	    border: 1px solid rgba(0,212,255,0.1);
+	  }
+	  .message.bot .content pre {
+	    background: rgba(255,255,255,0.03); padding: 14px 18px; border-radius: 10px;
+	    overflow-x: auto; margin: 10px 0; font-size: 13px;
+	    font-family: var(--font-mono); border: 1px solid rgba(0,212,255,0.08);
+	    box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
+	  }
+	  .message.bot .content pre code { background: none; padding: 0; color: inherit; }
+	  .message.bot .content strong { font-weight: 600; }
+	  .message.bot .content ul, .message.bot .content ol { padding-left: 20px; margin: 6px 0; }
+	  .message.bot .content li { margin-bottom: 4px; }
+
+	  .sources {
+	    margin-top: 14px; padding: 12px 14px;
+	    background: linear-gradient(135deg, rgba(0,212,255,0.05), rgba(124,58,237,0.025));
+	    border: 1px solid rgba(0,212,255,0.1);
+	    border-radius: 12px;
+	    backdrop-filter: blur(8px);
+	  }
+	  .sources-header {
+	    font-size: 12px; font-weight: 600; color: var(--accent);
+	    margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+	    letter-spacing: 0.3px;
+	  }
+	  .source-list { display: flex; flex-wrap: wrap; gap: 6px; }
+	  .source-item {
+	    display: inline-flex; align-items: center; gap: 5px;
+	    background: rgba(255,255,255,0.04); border: 1px solid rgba(0,212,255,0.06);
+	    padding: 5px 11px; border-radius: 7px; font-size: 12px;
+	    color: var(--msg-text); cursor: pointer; transition: all 0.15s;
+	    max-width: 260px; position: relative; overflow: hidden;
+	  }
+	  .source-item .source-score {
+	    font-size: 10px; color: var(--accent); font-weight: 600;
+	    background: rgba(0,212,255,0.1); padding: 1px 6px;
+	    border-radius: 4px; margin-left: 6px;
+	    position: relative; z-index: 1;
+	  }
+	  .source-item .score-bar-wrap {
+	    position: absolute; bottom: 0; left: 0; right: 0; height: 100%;
+	    border-radius: 7px; overflow: hidden; z-index: 0;
+	  }
+	  .source-item .score-bar {
+	    height: 100%; border-radius: 7px;
+	    transition: width 0.5s ease;
+	  }
+	  .source-item {
+	    position: relative; overflow: hidden;
+	  }
+	  .source-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+
+	  .thinking-block {
+	    margin-top: 14px; border-radius: 10px; overflow: hidden;
+	    background: rgba(255,255,255,0.03); border: 1px solid rgba(124,58,237,0.15);
+	  }
+	  .thinking-block .thinking-header {
+	    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+	    cursor: pointer; user-select: none; font-size: 12px;
+	    color: var(--msg-text-muted); transition: background 0.12s;
+	  }
+	  .thinking-block .thinking-header:hover { background: rgba(124,58,237,0.06); }
+	  .thinking-block .thinking-header .arrow { font-size: 10px; transition: transform 0.2s; flex-shrink: 0; }
+	  .thinking-block .thinking-header .arrow.expanded { transform: rotate(90deg); }
+	  .thinking-block .thinking-header .dot-pulse { display: inline-flex; gap: 3px; align-items: center; }
+	  .thinking-block .thinking-header .dot-pulse span {
+	    width: 4px; height: 4px; border-radius: 50%;
+	    background: var(--msg-text-muted); animation: thinkingPulse 1.4s infinite ease-in-out;
+	  }
+	  .thinking-block .thinking-header .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+	  .thinking-block .thinking-header .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+	  @keyframes thinkingPulse { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 0.6; } }
+	  .thinking-block .thinking-body {
+	    display: none; padding: 14px 14px 8px; font-size: 13px; line-height: 1.7;
+	    color: #8888aa; font-family: var(--font-mono); white-space: pre-wrap;
+	    word-break: break-word; border-top: 1px solid rgba(255,255,255,0.06);
+	    max-height: 200px; overflow: hidden;
+	    transition: max-height 0.3s ease;
+	  }
+	  .thinking-block .thinking-body.open {
+	    display: block;
+	  }
+	  .thinking-block .thinking-body.expanded {
+	    max-height: 2000px;
+	  }
+	  .thinking-block .thinking-toggle {
+	    display: none; width: 100%; padding: 6px 14px 10px;
+	    background: none; border: none; border-top: 1px solid rgba(124,58,237,0.06);
+	    color: #7c3aed; cursor: pointer; font-size: 12px; font-family: inherit;
+	    text-align: center; transition: all 0.15s;
+	  }
+	  .thinking-block .thinking-toggle:hover {
+	    background: rgba(124,58,237,0.04); color: #a855f7;
+	  }
+	  .thinking-block .thinking-toggle.visible {
+	    display: block;
+	  }
+	  .stage-badge {
+	    display: inline-flex; align-items: center; gap: 6px;
+	    margin-bottom: 10px; font-size: 12px; color: var(--msg-text-muted);
+	  }
+	  .stage-badge .spinner {
+	    width: 12px; height: 12px;
+	    border: 2px solid var(--border-subtle);
+	    border-top-color: var(--accent); border-radius: 50%;
+	    animation: spin 0.8s linear infinite;
+	  }
+	  @keyframes spin { to { transform: rotate(360deg); } }
+	  .stream-cursor::after { content: "8D"; animation: blink 0.8s step-end infinite; color: var(--accent); }
+	  @keyframes blink { 50% { opacity: 0; } }
+
+	  @keyframes neonPulse {
+	    0%, 100% { box-shadow: 0 0 12px rgba(0,212,255,0.2); }
+	    50% { box-shadow: 0 0 24px rgba(0,212,255,0.4), 0 0 40px rgba(0,212,255,0.1); }
+	  }
+
+	  @keyframes glowPulse {
+	    0%, 100% { box-shadow: 0 0 8px rgba(0,212,255,0.1); }
+	    50% { box-shadow: 0 0 20px rgba(0,212,255,0.2); }
+	  }
+
+	  .input-area { padding: 0 24px 24px; position: relative; }
+	  .input-inner { max-width: 760px; margin: 0 auto; position: relative; }
+	  .input-box {
+	    display: flex; align-items: flex-end; gap: 8px;
+	    background: rgba(255,255,255,0.03); border: 1px solid rgba(0,212,255,0.12);
+	    border-radius: 14px; padding: 6px 6px 6px 18px;
+	    transition: border-color 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm);
+	    backdrop-filter: blur(12px);
+	  }
+	  .input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow), var(--shadow-md), 0 0 30px rgba(0,212,255,0.08); }
+	  .input-box textarea {
+	    flex: 1; background: transparent; border: none; outline: none;
+	    color: var(--msg-text); font-size: 14px; font-family: inherit;
+	    padding: 8px 0; resize: none; min-height: 22px; max-height: 120px; line-height: 1.5;
+	  }
+	  .input-box textarea::placeholder { color: #b0b0b8; }
+	  .input-box .send-btn {
+	    background: linear-gradient(135deg, #00d4ff, #7c3aed); border: none; color: #fff;
+	    width: 36px; height: 36px; border-radius: 10px;
+	    cursor: pointer; font-size: 16px;
+	    display: flex; align-items: center; justify-content: center;
+	    transition: all 0.15s; flex-shrink: 0;
+	  }
+	  .input-box .send-btn:hover { background: linear-gradient(135deg, #33ddff, #8b5cf6); transform: scale(1.04); box-shadow: 0 0 20px rgba(0,212,255,0.3); }
+	  .input-box .send-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+
+	  .source-modal {
+	    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+	    background: rgba(0,0,0,0.6); backdrop-filter: blur(12px);
+	    z-index: 300; align-items: center; justify-content: center;
+	  }
+	  .source-modal.active { display: flex; }
+	  .source-modal .modal {
+	    background: #12121e; border-radius: 14px;
+	    max-width: 680px; width: 90%; max-height: 70vh;
+	    display: flex; flex-direction: column; box-shadow: 0 0 40px rgba(0,212,255,0.1), var(--shadow-lg);
+	    border: 1px solid rgba(0,212,255,0.08);
+	  }
+	  .source-modal .modal-header {
+	    padding: 16px 20px; border-bottom: 1px solid var(--border-subtle);
+	    display: flex; justify-content: space-between; align-items: center;
+	  }
+	  .source-modal .modal-header h3 { font-size: 14px; color: var(--msg-text); font-weight: 600; }
+	  .source-modal .modal-header .close {
+	    background: none; border: none; color: var(--msg-text-muted);
+	    font-size: 18px; cursor: pointer; padding: 4px; border-radius: 6px; transition: all 0.12s;
+	  }
+	  .source-modal .modal-header .close:hover { background: rgba(255,255,255,0.08); color: #f5f5f7; }
+	  .source-modal .modal-body {
+	    padding: 20px; overflow-y: auto; font-size: 14px;
+	    line-height: 1.8; color: #8888aa;
+	    white-space: pre-wrap; font-family: var(--font-mono);
+	  }
+
+	  /* ============ Like / Dislike ============ */
+	  .msg-actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+	  .msg-actions .action-btn {
+	    background: none; border: 1px solid var(--border-subtle);
+	    color: var(--msg-text-muted); cursor: pointer; padding: 3px 8px;
+	    border-radius: 6px; font-size: 13px; line-height: 1;
+	    transition: all 0.15s; font-family: inherit;
+	  }
+	  .msg-actions .action-btn:hover { border-color: #c0c0cc; color: var(--msg-text); }
+	  .msg-actions .action-btn.active-up { background: rgba(0,113,227,0.1); border-color: var(--accent); color: var(--accent); }
+	  .msg-actions .action-btn.active-down { background: rgba(255,69,58,0.1); border-color: var(--danger); color: var(--danger); }
+
+	  /* ============ Related Questions ============ */
+	  .related-qs { margin-top: 14px; }
+	  .related-qs .label { font-size: 12px; color: var(--msg-text-muted); margin-bottom: 6px; }
+	  .related-qs .qs-list { display: flex; gap: 6px; flex-wrap: wrap; }
+	  .related-qs .qs-list button {
+	    background: rgba(255,255,255,0.03); border: 1px solid rgba(0,212,255,0.1);
+	    color: var(--msg-text); padding: 6px 14px; border-radius: 16px;
+	    cursor: pointer; font-size: 12px; font-family: inherit;
+	    transition: all 0.15s;
+	  }
+	  .related-qs .qs-list button:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.06); }
+
+	  /* ============ Token Usage ============ */
+	  .token-usage {
+	    display: inline-flex; align-items: center; gap: 4px;
+	    font-size: 11px; color: var(--msg-text-muted); margin-top: 8px;
+	    opacity: 0.7;
+	  }
+
+	  /* ============ Ambiguous Banner ============ */
+	  .ambiguous-banner {
+	    margin-top: 14px; margin-bottom: 14px; padding: 14px 16px;
+	    background: linear-gradient(135deg, rgba(255,200,50,0.08), rgba(255,150,50,0.04));
+	    border: 1px solid rgba(255,200,50,0.2);
+	    border-radius: 12px; font-size: 13px; color: #f0c040; line-height: 1.6;
+	    box-shadow: 0 0 20px rgba(255,200,50,0.04);
+	  }
+	  .ambiguous-banner .amb-message {
+	    display: flex; align-items: flex-start; gap: 8px;
+	  }
+	  .ambiguous-banner .amb-icon {
+	    font-size: 16px; flex-shrink: 0; margin-top: 2px;
+	  }
+	  .ambiguous-banner .amb-suggestions {
+	    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;
+	  }
+	  .ambiguous-banner .amb-suggestions button {
+	    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,200,50,0.2); color: #f0c040;
+	    padding: 7px 16px; border-radius: 18px; cursor: pointer;
+	    font-size: 12px; font-family: inherit; transition: all 0.2s;
+	    backdrop-filter: blur(8px);
+	  }
+	  .ambiguous-banner .amb-suggestions button:hover {
+	    background: rgba(255,200,50,0.12); border-color: rgba(255,200,50,0.4);
+	    box-shadow: 0 0 12px rgba(255,200,50,0.1);
+	  }
+
+
+	  /* ============ Chart Container ============ */
+	  .chart-container {
+	    margin: 14px 0; padding: 16px;
+	    background: rgba(255,255,255,0.03);
+	    border: 1px solid rgba(0,212,255,0.1);
+	    border-radius: 12px;
+	    backdrop-filter: blur(8px);
+	    max-width: 100%; overflow-x: auto;
+	  }
+	  .chart-container canvas { max-height: 350px; max-width: 100%; }
+
+
+	  @media (max-width: 768px) {
+	    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; transform: translateX(-100%); z-index: 150; box-shadow: 4px 0 24px rgba(0,0,0,0.1); }
+	    .sidebar.open { transform: translateX(0); }
+	    .sidebar-toggle { display: flex; }
+	    .main { padding-top: 0; }
+	    .messages-inner { padding: 0 16px; }
+	    .input-area { padding: 0 16px 16px; }
+	    .message.user .content { max-width: 85%; }
+	  }
+	  ::selection { background: rgba(0,113,227,0.3); color: #fff; }
+	</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- Sidebar -->
+<button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">☰</button>
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">⚡</div>
+    <h1>行政大脑引擎</h1>
+  </div>
+  <div class="sidebar-actions">
+    <button class="new-chat-btn" onclick="newChat()">
+      <span>+</span> 新对话
+    </button>
+  </div>
+  <div class="conversation-list" id="conversationList"></div>
+  <div class="sidebar-footer">
+    <div class="avatar">👤</div>
+    <span>行政大脑 v1.0</span>
+  </div>
+</nav>
+
+<!-- Main -->
+<div class="main">
+  <!-- Overlay for mobile sidebar -->
+  <div id="sidebarOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:140" onclick="toggleSidebar()"></div>
+
+  <div class="messages" id="messageContainer">
+    <div class="messages-inner">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🧠</div>
+        <h2>行政大脑引擎</h2>
+        <p>基于计算机科学论文的智能知识问答引擎，覆盖深度学习、NLP、CV 等研究方向。</p>
+        <div class="suggestions">
+          <button onclick="ask('什么是 Transformer 架构？')">Transformer 架构</button>
+          <button onclick="ask('LoRA 微调方法的原理是什么？')">LLM 微调</button>
+          <button onclick="ask('注意力机制在 NLP 中如何应用？')">注意力机制</button>
+          <button onclick="ask('深度强化学习的主要算法有哪些？')">强化学习</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-inner">
+      <div class="input-box">
+        <textarea id="input" rows="1" placeholder="输入你的问题..."
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="send()">➤</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Source Modal -->
+<div class="source-modal" id="sourceModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📄 文档原文</h3>
+      <button class="close" onclick="closeSourceModal()">✕</button>
+    </div>
+    <div class="modal-body" id="sourceContent"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  Conversation Manager (localStorage)
+// ============================================================
+const STORAGE_KEY = 'rag_conversations';
+let currentConvId = null;
+let isStreaming = false;
+let _chartCnt = 0;
+let _chartInstances = {};
+let streamBubble = null;
+let streamStageBadge = null;
+let streamMsgEl = null;
+let streamThinkingContainer = null;
+
+function getConversations() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
+}
+function saveConversations(convs) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
+}
+
+function getConv(id) {
+  return getConversations().find(c => c.id === id);
+}
+
+function createConversation() {
+  const convs = getConversations();
+  const id = Date.now().toString();
+  const conv = { id, title: '新对话', messages: [], createdAt: id };
+  convs.unshift(conv);
+  saveConversations(convs);
+  return conv;
+}
+
+function updateConvTitle(id) {
+  const convs = getConversations();
+  const conv = convs.find(c => c.id === id);
+  if (!conv) return;
+  const first = conv.messages.find(m => m.role === 'user');
+  if (first) {
+    conv.title = first.content.replace(/[\n\r]/g, ' ').slice(0, 40) + (first.content.length > 40 ? '…' : '');
+  }
+  saveConversations(convs);
+}
+
+function addMessageToConv(convId, msg) {
+  const convs = getConversations();
+  const conv = convs.find(c => c.id === convId);
+  if (!conv) return;
+  conv.messages.push(msg);
+  if (msg.role === 'user') {
+    updateConvTitle(convId);
+  }
+  saveConversations(convs);
+  renderConversationList();
+}
+
+function updateMessageInConv(convId, index, updates) {
+  const convs = getConversations();
+  const conv = convs.find(c => c.id === convId);
+  if (!conv || !conv.messages[index]) return;
+  Object.assign(conv.messages[index], updates);
+  saveConversations(convs);
+}
+
+function deleteConversation(id, event) {
+  if (event) event.stopPropagation();
+  let convs = getConversations();
+  convs = convs.filter(c => c.id !== id);
+  saveConversations(convs);
+  if (currentConvId === id) {
+    if (convs.length > 0) {
+      switchConversation(convs[0].id);
+    } else {
+      const conv = createConversation();
+      switchConversation(conv.id);
+    }
+  }
+  renderConversationList();
+}
+
+function renderConversationList() {
+  const list = document.getElementById('conversationList');
+  const convs = getConversations();
+  list.innerHTML = convs.map(c => `
+    <div class="conv-item ${c.id === currentConvId ? 'active' : ''}" onclick="switchConversation('${c.id}')">
+      <span class="conv-title">${escapeHtml(c.title)}</span>
+      <button class="conv-delete" onclick="deleteConversation('${c.id}', event)" title="删除">✕</button>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+//  Navigation
+// ============================================================
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').style.display =
+    document.getElementById('sidebar').classList.contains('open') ? 'block' : 'none';
+}
+
+function newChat() {
+  const conv = createConversation();
+  switchConversation(conv.id);
+  if (window.innerWidth <= 768) toggleSidebar();
+}
+
+function switchConversation(id) {
+  // save current conversation's messages from DOM
+  saveCurrentConvMessages();
+
+  currentConvId = id;
+  renderConversationList();
+  loadConversationMessages(id);
+
+  // Close mobile sidebar
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').style.display = 'none';
+  }
+}
+
+function saveCurrentConvMessages() {
+  if (!currentConvId) return;
+  const convs = getConversations();
+  const conv = convs.find(c => c.id === currentConvId);
+  if (!conv) return;
+  // messages are already saved as they come in (in send/stream flow)
+  // but we sync any DOM state
+  saveConversations(convs);
+}
+
+function loadConversationMessages(id) {
+  const container = document.getElementById('messageContainer');
+  const inner = container.querySelector('.messages-inner');
+  const empty = document.getElementById('emptyState');
+
+  // Clear existing messages (keep empty state hidden)
+  inner.querySelectorAll('.message').forEach(el => el.remove());
+  empty.style.display = 'none';
+
+  const conv = getConv(id);
+  if (!conv || conv.messages.length === 0) {
+    empty.style.display = 'flex';
+    return;
+  }
+
+  conv.messages.forEach((msg, idx) => {
+    const mid = msg.id || ('hist-' + idx);
+    addMessage(msg.role, msg.content, msg.sources, msg.thinking, true, mid);
+  });
+}
+
+// ============================================================
+//  UI Helpers
+// ============================================================
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// arXiv 论文标题映射（用于美化来源显示）
+const PAPER_TITLES = {
+  "1706.03762": "Attention Is All You Need",
+  "2106.09685": "LoRA: Low-Rank Adaptation of LLMs",
+  "2005.11401": "RAG: Retrieval-Augmented Generation",
+  "2203.02155": "LLaMA: Open Foundation Models",
+  "2302.13971": "LLaMA 2",
+  "2001.08361": "Scaling Laws for Neural Language Models",
+  "2005.14165": "GPT-3: Language Models are Few-Shot Learners",
+  "2201.11903": "Chain-of-Thought Prompting",
+  "2107.03374": "Longformer: Long-Document Transformer",
+  "1909.11942": "VL-BERT: Visual-Linguistic BERT",
+  "1512.03385": "ResNet: Deep Residual Learning",
+  "1409.1556": "VGGNet: Very Deep ConvNets",
+  "1704.04861": "MobileNets",
+  "1502.03167": "Batch Normalization",
+  "1603.05027": "Identity Mappings in ResNet",
+  "1312.5602": "Deep Q-Network",
+  "1509.06461": "Deep Reinforcement Learning - Pong",
+  "1707.06347": "PPO: Proximal Policy Optimization",
+  "1602.01783": "A3C: Asynchronous Methods",
+  "1811.02553": "Dota 2 with OpenAI Five",
+  "1609.02907": "GCN: Graph Convolutional Networks",
+  "1703.06103": "Graph Attention Networks",
+  "1606.09375": "Gated Graph Neural Networks",
+  "1806.01261": "How Powerful are GNNs?",
+  "1901.07291": "Supervised GNNs for Quantum Chemistry",
+  "1406.2661": "Generative Adversarial Nets",
+  "1710.03740": "ALBERT: Lite BERT",
+  "1810.04805": "BERT: Pre-training Deep Bidirectional Transformers",
+  "1907.11692": "RoBERTa: Robustly Optimized BERT",
+  "1910.01108": "UniLM: Unified Language Model"
+};
+
+function formatSource(source) {
+  if (typeof source === 'string') {
+    const match = source.match(/arxiv_(\d+\.\d+)/);
+    if (match && PAPER_TITLES[match[1]]) {
+      return PAPER_TITLES[match[1]];
+    }
+    const stem = source.replace(/^.*\//, '').replace(/\.md.*$/, '').replace(/^arxiv_/, 'arXiv ');
+    return stem;
+  }
+  if (source && source.source) return formatSource(source.source);
+  return source || '文档';
+}
+
+// Like/Dislike 状态管理
+const LIKE_STORAGE_KEY = 'rag_msg_likes';
+function getMsgLikes() {
+  try { return JSON.parse(localStorage.getItem(LIKE_STORAGE_KEY)) || {}; } catch { return {}; }
+}
+function saveMsgLike(convId, msgId, value) {
+  const likes = getMsgLikes();
+  if (!likes[convId]) likes[convId] = {};
+  if (value === null) {
+    delete likes[convId][msgId];
+  } else {
+    likes[convId][msgId] = value;
+  }
+  localStorage.setItem(LIKE_STORAGE_KEY, JSON.stringify(likes));
+}
+function getMsgLike(convId, msgId) {
+  const likes = getMsgLikes();
+  return likes[convId] ? likes[convId][msgId] || null : null;
+}
+
+// 生成唯一消息 ID
+let _msgIdCounter = 0;
+function nextMsgId() {
+  return Date.now().toString(36) + '-' + (++_msgIdCounter);
+}
+
+// ============================================================
+//  Message Rendering
+// ============================================================
+function addMessage(role, content, sources, thinking, isHistorical, msgId) {
+  const container = document.getElementById('messageContainer');
+  const inner = container.querySelector('.messages-inner');
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.style.display = 'none';
+
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = role === 'user' ? '👤' : '🤖';
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'content';
+
+  if (role === 'user') {
+    contentDiv.textContent = content;
+  } else {
+    // bot message: thinking → 回答 → like/dislike → 来源
+    if (thinking) {
+      const tb = createThinkingBlock(thinking, false);
+      contentDiv.appendChild(tb);
+    }
+
+    const textDiv = document.createElement('div');
+    textDiv.innerHTML = formatContent(content);
+    contentDiv.appendChild(textDiv);
+    initCharts(textDiv);
+
+    // Like / Dislike 按钮
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'msg-actions';
+    const likeBtn = document.createElement('button');
+    likeBtn.className = 'action-btn';
+    likeBtn.textContent = '👍';
+    likeBtn.dataset.msgId = msgId || '';
+    const dislikeBtn = document.createElement('button');
+    dislikeBtn.className = 'action-btn';
+    dislikeBtn.textContent = '👎';
+    dislikeBtn.dataset.msgId = msgId || '';
+
+    // 恢复已保存状态
+    if (msgId && currentConvId) {
+      const saved = getMsgLike(currentConvId, msgId);
+      if (saved === 'up') likeBtn.classList.add('active-up');
+      else if (saved === 'down') dislikeBtn.classList.add('active-down');
+    }
+
+    likeBtn.onclick = () => {
+      if (!currentConvId || !msgId) return;
+      const current = getMsgLike(currentConvId, msgId);
+      const newVal = current === 'up' ? null : 'up';
+      saveMsgLike(currentConvId, msgId, newVal);
+      likeBtn.classList.toggle('active-up', newVal === 'up');
+      dislikeBtn.classList.remove('active-down');
+    };
+    dislikeBtn.onclick = () => {
+      if (!currentConvId || !msgId) return;
+      const current = getMsgLike(currentConvId, msgId);
+      const newVal = current === 'down' ? null : 'down';
+      saveMsgLike(currentConvId, msgId, newVal);
+      dislikeBtn.classList.toggle('active-down', newVal === 'down');
+      likeBtn.classList.remove('active-up');
+    };
+    actionsDiv.appendChild(likeBtn);
+    actionsDiv.appendChild(dislikeBtn);
+    contentDiv.appendChild(actionsDiv);
+
+    if (sources && sources.length > 0) {
+      // Filter to only items with score >= 20%
+      const valid = sources.filter(function(s) {
+        var sc = s && s.score != null ? s.score : 0;
+        return Math.round(sc * 100) >= 20;
+      });
+      if (valid.length === 0) return;
+      const sourcesDiv = document.createElement('div');
+      sourcesDiv.className = 'sources';
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'sources-header';
+      headerDiv.innerHTML = '📄 参考来源 <span>点击查看详情</span>';
+      sourcesDiv.appendChild(headerDiv);
+      const srcList = document.createElement('div');
+      srcList.className = 'source-list';
+      valid.forEach(s => {
+        const item = document.createElement('span');
+        item.className = 'source-item';
+        const name = formatSource(s);
+        const score = s && s.score != null ? s.score : 0;
+        const pct = Math.round(score * 100);
+        const neonColor = pct > 70 ? 'rgba(0,212,255,0.2)' : (pct > 30 ? 'rgba(0,212,255,0.1)' : 'rgba(124,58,237,0.1)');
+        item.innerHTML = escapeHtml(name) + ' <span class="source-score">' + pct + '%</span>'
+          + '<span class="score-bar-wrap"><span class="score-bar" style="width:' + pct + '%;background:' + neonColor + '"></span></span>';
+        item.onclick = () => showSourceDetail(s);
+        srcList.appendChild(item);
+      });
+      sourcesDiv.appendChild(srcList);
+      contentDiv.appendChild(sourcesDiv);
+    }
+  }
+
+  div.appendChild(avatar);
+  div.appendChild(contentDiv);
+  inner.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return { bubbleEl: contentDiv, msgEl: div };
+}
+
+function addStreamMessage() {
+  const container = document.getElementById('messageContainer');
+  const inner = container.querySelector('.messages-inner');
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.style.display = 'none';
+
+  const div = document.createElement('div');
+  div.className = 'message bot';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = '🤖';
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'content';
+
+  const stageBadge = document.createElement('div');
+  stageBadge.className = 'stage-badge';
+  stageBadge.innerHTML = '<div class="spinner"></div><span>检索文档中...</span>';
+  contentDiv.appendChild(stageBadge);
+
+  // thinking container
+  const thinkingContainer = document.createElement('div');
+  thinkingContainer.style.display = 'none';
+  contentDiv.appendChild(thinkingContainer);
+
+  div.appendChild(avatar);
+  div.appendChild(contentDiv);
+  inner.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+
+  streamMsgEl = div;
+  streamBubble = contentDiv;
+  streamStageBadge = stageBadge;
+  streamThinkingContainer = thinkingContainer;
+}
+
+function updateStreamContent(text, finished) {
+  if (!streamBubble) return;
+  const container = streamBubble;
+  let textDiv = container.querySelector('.bubble-stream-text');
+  if (!textDiv) {
+    textDiv = document.createElement('div');
+    textDiv.className = 'bubble-stream-text';
+    // 插入到 thinking 容器之后（stage-badge → thinking → 回答 → sources）
+    if (streamThinkingContainer) {
+      container.insertBefore(textDiv, streamThinkingContainer.nextSibling);
+    } else {
+      container.appendChild(textDiv);
+    }
+  }
+  textDiv.innerHTML = formatContent(text) + (finished ? '' : '<span class="stream-cursor"></span>');
+  initCharts(textDiv);
+  document.getElementById('messageContainer').scrollTop = document.getElementById('messageContainer').scrollHeight;
+}
+
+function updateStage(stage) {
+  if (!streamStageBadge) return;
+  const labels = {
+    retrieved: '📄 已检索到相关文档',
+    generating: '🧠 生成回答中…',
+    answer: '📄 生成回答',
+    finished: '✅ 完成'
+  };
+  streamStageBadge.innerHTML = `<div class="spinner"></div><span>${labels[stage] || stage}</span>`;
+  if (stage === 'finished') {
+    setTimeout(() => { if (streamStageBadge) streamStageBadge.remove(); }, 500);
+  }
+}
+
+function addSources(sources) {
+  if (!streamBubble || !sources || sources.length === 0) return;
+
+  // Filter to only items with score >= 20%
+  const valid = sources.filter(s => {
+    const score = s && s.score != null ? s.score : 0;
+    return Math.round(score * 100) >= 20;
+  });
+  if (valid.length === 0) return;
+
+  let sourcesDiv = streamBubble.querySelector('.sources');
+  if (!sourcesDiv) {
+    sourcesDiv = document.createElement('div');
+    sourcesDiv.className = 'sources';
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'sources-header';
+    headerDiv.innerHTML = '📄 参考来源 <span>点击查看详情</span>';
+    sourcesDiv.appendChild(headerDiv);
+    const srcList = document.createElement('div');
+    srcList.className = 'source-list';
+    sourcesDiv.appendChild(srcList);
+    streamBubble.appendChild(sourcesDiv);
+  }
+  const srcList = sourcesDiv.querySelector('.source-list') || sourcesDiv;
+  srcList.innerHTML = '';
+  valid.forEach(s => {
+    const item = document.createElement('span');
+    item.className = 'source-item';
+    const name = formatSource(s);
+    const score = s && s.score != null ? s.score : 0;
+    const pct = Math.round(score * 100);
+    const neonColor = pct > 70 ? 'rgba(0,212,255,0.2)' : (pct > 30 ? 'rgba(0,212,255,0.1)' : 'rgba(124,58,237,0.1)');
+    item.innerHTML = escapeHtml(name) + ' <span class="source-score">' + pct + '%</span>'
+      + '<span class="score-bar-wrap"><span class="score-bar" style="width:' + pct + '%;background:' + neonColor + '"></span></span>';
+    item.onclick = () => showSourceDetail(s);
+    srcList.appendChild(item);
+  });
+}
+
+function createThinkingBlock(thinkingText, streaming) {
+  const block = document.createElement('div');
+  block.className = 'thinking-block';
+
+  const header = document.createElement('div');
+  header.className = 'thinking-header';
+
+  const arrow = document.createElement('span');
+  arrow.className = 'arrow';
+  arrow.textContent = '▶';
+
+  const label = document.createElement('span');
+  if (streaming) {
+    label.innerHTML = '思考过程 <span class="dot-pulse"><span></span><span></span><span></span></span>';
+  } else {
+    label.textContent = '思考过程';
+  }
+
+  header.appendChild(arrow);
+  header.appendChild(label);
+
+  const body = document.createElement('div');
+  body.className = 'thinking-body';
+  body.textContent = thinkingText;
+
+  let isOpen = false;
+  header.onclick = () => {
+    isOpen = !isOpen;
+    body.classList.toggle('open', isOpen);
+    arrow.classList.toggle('expanded', isOpen);
+  };
+
+  block.appendChild(header);
+  block.appendChild(body);
+
+  // Show more/less toggle
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = 'thinking-toggle';
+  toggleBtn.textContent = '展开全部';
+  let isExpanded = false;
+  toggleBtn.onclick = (e) => {
+    e.stopPropagation();
+    isExpanded = !isExpanded;
+    body.classList.toggle('expanded', isExpanded);
+    toggleBtn.textContent = isExpanded ? '收起' : '展开全部';
+    if (!body.classList.contains('open')) {
+      body.classList.add('open');
+      arrow.classList.add('expanded');
+    }
+  };
+  block.appendChild(toggleBtn);
+
+  if (thinkingText && thinkingText.length > 500) {
+    toggleBtn.classList.add('visible');
+  }
+
+  return block;
+}
+
+function updateStreamThinking(thinkingText, streaming) {
+  const container = streamThinkingContainer;
+  if (!container) return;
+  if (!thinkingText) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  let block = container.querySelector('.thinking-block');
+  if (!block) {
+    block = createThinkingBlock(thinkingText, streaming);
+    container.appendChild(block);
+    const arrow = block.querySelector('.arrow');
+    const body = block.querySelector('.thinking-body');
+    if (arrow && body) {
+      arrow.classList.add('expanded');
+      body.classList.add('open');
+    }
+  } else {
+    const body = block.querySelector('.thinking-body');
+    if (body) body.textContent = thinkingText;
+    const toggleBtn = block.querySelector('.thinking-toggle');
+    if (toggleBtn) {
+      if (thinkingText && thinkingText.length > 500) {
+        toggleBtn.classList.add('visible');
+      } else {
+        toggleBtn.classList.remove('visible');
+      }
+      body.classList.remove('expanded');
+      toggleBtn.textContent = '展开全部';
+    }
+    const label = block.querySelector('.thinking-header span:not(.arrow)');
+    if (label && streaming) {
+      label.innerHTML = '思考过程 <span class="dot-pulse"><span></span><span></span><span></span></span>';
+    } else if (label && !streaming) {
+      label.textContent = '思考过程';
+    }
+  }
+}
+
+
+// Chart.js rendering
+function renderChart(canvasId, config) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  try {
+    if (_chartInstances[canvasId]) {
+      _chartInstances[canvasId].destroy();
+    }
+    const ctx = canvas.getContext('2d');
+    _chartInstances[canvasId] = new Chart(ctx, config);
+  } catch(e) {
+    console.error('Chart render error:', e);
+  }
+}
+function initCharts(container) {
+  container = container || document;
+  container.querySelectorAll('.chart-container[data-chart]').forEach(el => {
+    const canvas = el.querySelector('canvas');
+    if (!canvas || canvas.dataset.chartInitialized) return;
+    try {
+      const config = JSON.parse(el.dataset.chart);
+      canvas.dataset.chartInitialized = '1';
+      renderChart(canvas.id, config);
+    } catch(e) {
+      el.innerHTML = '<div style="color:#ff4466;padding:10px;text-align:center;font-size:13px;">📊 图表渲染失败: ' + e.message + '</div>';
+    }
+  });
+}
+
+function renderChart(canvasId, config) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  try {
+    if (_chartInstances[canvasId]) {
+      _chartInstances[canvasId].destroy();
+    }
+    canvas.chartInstance = new Chart(canvas.getContext('2d'), config);
+    _chartInstances[canvasId] = canvas.chartInstance;
+  } catch(e) {
+    console.error('Chart render error:', e);
+  }
+}
+
+function initCharts(container) {
+  container = container || document;
+  container.querySelectorAll('.chart-container[data-chart]').forEach(function(el) {
+    var canvas = el.querySelector('canvas');
+    if (!canvas || canvas.getAttribute('data-chart-initialized')) return;
+    try {
+      var config = JSON.parse(el.getAttribute('data-chart'));
+      canvas.setAttribute('data-chart-initialized', '1');
+      renderChart(canvas.id, config);
+    } catch(e) {
+      el.innerHTML = '<div style="color:#ff4466;padding:10px;text-align:center;font-size:13px;">📊 图表渲染失败: ' + e.message + '</div>';
+    }
+  });
+}
+
+
+function formatContent(text) {
+  // Extract chart blocks
+  const charts = [];
+  text = text.replace(/\`\`\`chart\s*\n?([\s\S]*?)\`\`\`/g, function(match, jsonStr) {
+    const id = 'chart-' + (_chartCnt++);
+    charts.push({id: id, json: jsonStr});
+    return '[[CHART_' + id + ']]';
+  });
+
+  var result = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\`(.*?)\`/g, '<code>$1</code>');
+
+  // Replace chart placeholders
+  for (var i = 0; i < charts.length; i++) {
+    var c = charts[i];
+    var escaped = c.json.replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    result = result.replace('[[CHART_' + c.id + ']]',
+      '<div class="chart-container" data-chart=\"' + escaped + '\"><canvas id="' + c.id + '"></canvas></div>');
+  }
+
+  return result;
+}
+
+
+function showSourceDetail(source) {
+  const el = document.getElementById('sourceContent');
+  if (typeof source === 'string') {
+    el.textContent = `来源: ${source}\n\n(文档原文)`;
+  } else {
+    el.textContent = `来源: ${source.source || '未知'}\n\n${source.text || ''}\n\n相似度: ${(source.score || 0).toFixed(4)}`;
+  }
+  document.getElementById('sourceModal').classList.add('active');
+}
+
+function closeSourceModal() {
+  document.getElementById('sourceModal').classList.remove('active');
+}
+
+// ============================================================
+//  Ambiguous / Related / Token Helpers
+// ============================================================
+function addAmbiguousBanner(message, suggestions) {
+  if (!streamBubble) return;
+  // Remove any existing ambiguous banner
+  const existing = streamBubble.querySelector('.ambiguous-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.className = 'ambiguous-banner';
+  banner.innerHTML = '<div class="amb-message"><span class="amb-icon">&#x26A0;&#xFE0F;</span><span>' + escapeHtml(message) + '</span></div>';
+
+  if (suggestions.length > 0) {
+    const sugDiv = document.createElement('div');
+    sugDiv.className = 'amb-suggestions';
+    suggestions.forEach(s => {
+      const btn = document.createElement('button');
+      btn.textContent = s;
+      btn.onclick = () => ask(s);
+      sugDiv.appendChild(btn);
+    });
+    banner.appendChild(sugDiv);
+  }
+
+  // Insert at the beginning of stream bubble
+  streamBubble.insertBefore(banner, streamBubble.firstChild);
+}
+
+function addRelatedQuestions(questions) {
+  if (!streamBubble || !questions || questions.length === 0) return;
+  const existing = streamBubble.querySelector('.related-qs');
+  if (existing) existing.remove();
+
+  const container = document.createElement('div');
+  container.className = 'related-qs';
+  container.innerHTML = '<div class="label">💡 相关问题</div>';
+
+  const list = document.createElement('div');
+  list.className = 'qs-list';
+  questions.forEach(q => {
+    const btn = document.createElement('button');
+    btn.textContent = q;
+    btn.onclick = () => ask(q);
+    list.appendChild(btn);
+  });
+  container.appendChild(list);
+  streamBubble.appendChild(container);
+}
+
+function addTokenUsage(tokenUsage) {
+  if (!streamBubble || !tokenUsage) return;
+  const existing = streamBubble.querySelector('.token-usage');
+  if (existing) existing.remove();
+
+  const el = document.createElement('div');
+  el.className = 'token-usage';
+  el.textContent = `~${tokenUsage.total || 0} tokens (输入 ${tokenUsage.input || 0} / 输出 ${tokenUsage.output || 0})`;
+  streamBubble.appendChild(el);
+}
+
+// ============================================================
+//  Send / API
+// ============================================================
+async function ask(text) {
+  document.getElementById('input').value = text;
+  await send();
+}
+
+async function send() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text || isStreaming) return;
+
+  input.value = '';
+  autoResizeInput();
+
+  // Ensure we have a current conversation
+  if (!currentConvId) {
+    const conv = createConversation();
+    currentConvId = conv.id;
+    renderConversationList();
+  }
+
+  const userMsg = { role: 'user', content: text };
+  addMessage('user', text);
+  addMessageToConv(currentConvId, userMsg);
+
+  await sendStream(text);
+}
+
+async function sendStream(text) {
+  isStreaming = true;
+  setLoading(true);
+  let fullAnswer = '';
+  let sources = [];
+  let wasAmbiguous = false;
+  let botMsgId = nextMsgId();
+
+  // 收集历史对话（最近 10 轮，不包括刚发的消息）
+  const conv = getConv(currentConvId);
+  const chatHistory = conv ? conv.messages.slice(0, -1).slice(-20) : [];
+
+  try {
+    const resp = await fetch('/api/rag/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: text, top_k: 3, chat_history: chatHistory })
+    });
+
+    if (!resp.ok) {
+      addMessage('bot', `❌ 请求失败: ${resp.status}`);
+      isStreaming = false;
+      setLoading(false);
+      return;
+    }
+
+    addStreamMessage();
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.stage === 'retrieved' && data.docs) {
+            updateStage('retrieved');
+            sources = data.docs.map(d => d.source).filter(Boolean);
+          } else if (data.stage === 'ambiguous') {
+            // 模糊问题提示
+            wasAmbiguous = true;
+            addAmbiguousBanner(data.message, data.suggestions || []);
+          } else if (data.stage === 'generating') {
+            updateStage('generating');
+            fullAnswer = data.content || '';
+            updateStreamContent(fullAnswer, false);
+            if (data.thinking) {
+              updateStreamThinking(data.thinking, true);
+            }
+          } else if (data.stage === 'answer' || data.stage === 'finished') {
+            fullAnswer = data.content || fullAnswer;
+            updateStreamContent(fullAnswer, true);
+            updateStage('finished');
+            updateStreamThinking(data.thinking || '', false);
+            if (!wasAmbiguous && data.sources && data.sources.length > 0) {
+              sources = data.sources;
+              addSources(sources);
+            } else if (!wasAmbiguous && sources.length > 0) {
+              addSources(sources);
+            }
+            // Token 统计（非 LLM 模式）
+            if (data.token_usage) {
+              addTokenUsage(data.token_usage);
+            }
+          } else if (data.stage === 'done') {
+            // 模糊问题时提前结束，不生成回答
+            if (wasAmbiguous) {
+              if (streamStageBadge) streamStageBadge.remove();
+            }
+            // 相关问题 + Token 统计（流式完成后的补充数据）
+            if (data.related_questions && data.related_questions.length > 0) {
+              addRelatedQuestions(data.related_questions);
+            }
+            if (data.token_usage) {
+              addTokenUsage(data.token_usage);
+            }
+          }
+        } catch(e) { /* ignore parse errors */ }
+      }
+    }
+
+    // Save bot message to conversation (skip when ambiguous)
+    if (currentConvId && !wasAmbiguous) {
+      const botMsg = { role: 'bot', content: fullAnswer, sources, thinking: '', id: botMsgId };
+      // Extract thinking from the stream-thinking container
+      if (streamThinkingContainer) {
+        const body = streamThinkingContainer.querySelector('.thinking-body');
+        if (body) botMsg.thinking = body.textContent;
+      }
+      addMessageToConv(currentConvId, botMsg);
+
+      // 为流式 bot 消息添加 like/dislike 按钮（替换临时占位）
+      const botMsgs = document.querySelectorAll('.message.bot');
+      const lastBot = botMsgs[botMsgs.length - 1];
+      if (lastBot) {
+        const existingActions = lastBot.querySelector('.msg-actions');
+        if (!existingActions) {
+          const contentDiv = lastBot.querySelector('.content');
+          const textDiv = contentDiv.querySelector('.bubble-stream-text');
+          if (textDiv) {
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'msg-actions';
+            const likeBtn = document.createElement('button');
+            likeBtn.className = 'action-btn';
+            likeBtn.textContent = '👍';
+            likeBtn.dataset.msgId = botMsgId;
+            const dislikeBtn = document.createElement('button');
+            dislikeBtn.className = 'action-btn';
+            dislikeBtn.textContent = '👎';
+            dislikeBtn.dataset.msgId = botMsgId;
+            likeBtn.onclick = () => {
+              if (!currentConvId) return;
+              const current = getMsgLike(currentConvId, botMsgId);
+              const newVal = current === 'up' ? null : 'up';
+              saveMsgLike(currentConvId, botMsgId, newVal);
+              likeBtn.classList.toggle('active-up', newVal === 'up');
+              dislikeBtn.classList.remove('active-down');
+            };
+            dislikeBtn.onclick = () => {
+              if (!currentConvId) return;
+              const current = getMsgLike(currentConvId, botMsgId);
+              const newVal = current === 'down' ? null : 'down';
+              saveMsgLike(currentConvId, botMsgId, newVal);
+              dislikeBtn.classList.toggle('active-down', newVal === 'down');
+              likeBtn.classList.remove('active-up');
+            };
+            actionsDiv.appendChild(likeBtn);
+            actionsDiv.appendChild(dislikeBtn);
+            // Insert after text div, before sources
+            const sourcesDiv = contentDiv.querySelector('.sources');
+            if (sourcesDiv) {
+              contentDiv.insertBefore(actionsDiv, sourcesDiv);
+            } else {
+              contentDiv.appendChild(actionsDiv);
+            }
+          }
+        }
+      }
+    }
+
+    streamMsgEl = null;
+    streamBubble = null;
+    streamStageBadge = null;
+    streamThinkingContainer = null;
+    if (sources.length > 0 && !document.querySelector('.sources')) addSources(sources);
+
+  } catch (e) {
+    if (streamBubble) {
+      streamBubble.innerHTML += `<div style="color:var(--danger);margin-top:8px">❌ 连接中断: ${e.message}</div>`;
+    } else {
+      addMessage('bot', `❌ 请求失败: ${e.message}`);
+    }
+  }
+
+  isStreaming = false;
+  setLoading(false);
+  streamMsgEl = null;
+  streamBubble = null;
+  streamStageBadge = null;
+  streamThinkingContainer = null;
+}
+
+function setLoading(loading) {
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = loading;
+  btn.textContent = loading ? '◌' : '➤';
+  document.getElementById('input').disabled = loading;
+  if (!loading) document.getElementById('input').focus();
+}
+
+function autoResizeInput() {
+  const ta = document.getElementById('input');
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+}
+
+// ============================================================
+//  Init
+// ============================================================
+// Load or create conversation
+let convs = getConversations();
+if (convs.length === 0) {
+  const conv = createConversation();
+  convs = [conv];
+}
+currentConvId = convs[0].id;
+renderConversationList();
+loadConversationMessages(currentConvId);
+
+document.getElementById('input').focus();
+document.getElementById('input').addEventListener('input', autoResizeInput);
+
+document.getElementById('sourceModal').onclick = function(e) {
+  if (e.target === this) closeSourceModal();
+};
+</script>
+</body>
+</html>
