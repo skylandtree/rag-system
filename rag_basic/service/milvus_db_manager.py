@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Milvus Lite 向量数据库管理。
+"""Milvus 向量数据库管理（支持 Docker 模式和本地文件模式）。
 
-支持集合创建（dense + sparse 双字段）、数据插入、
-稠密检索、混合检索（RRF 融合）、集合清空。"""
+通过环境变量 MILVUS_HOST 控制连接方式：
+  - 设置 MILVUS_HOST → 连接 Docker Milvus (TCP)
+  - 未设置 → 使用 Milvus Lite 本地文件 (原始行为)
+"""
 from pymilvus import MilvusClient, DataType
 import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
+MILVUS_HOST = os.getenv("MILVUS_HOST", "")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
 MILVUS_DB_PATH = os.getenv("MILVUS_DB_PATH", str(PROJECT_ROOT / "milvus_data" / "rag_basic.db"))
 
 
@@ -16,8 +20,18 @@ class MilvusDBManager:
     def __init__(self, collection_name="rag_basic", dim=1024):
         self.collection_name = collection_name
         self.dim = dim
-        os.makedirs(os.path.dirname(MILVUS_DB_PATH), exist_ok=True)
-        self.client = MilvusClient(uri=MILVUS_DB_PATH)
+
+        if MILVUS_HOST:
+            # Docker Milvus 模式 — TCP 连接
+            uri = f"http://{MILVUS_HOST}:{MILVUS_PORT}"
+            print(f"连接 Milvus (Docker): {uri}")
+            self.client = MilvusClient(uri=uri)
+        else:
+            # 本地文件模式 — Milvus Lite
+            os.makedirs(os.path.dirname(MILVUS_DB_PATH), exist_ok=True)
+            print(f"连接 Milvus (本地文件): {MILVUS_DB_PATH}")
+            self.client = MilvusClient(uri=MILVUS_DB_PATH)
+
         self.schema = None
         self.index_params = None
 
@@ -50,9 +64,7 @@ class MilvusDBManager:
             field_name="vector",
             index_type="IVF_FLAT",
             metric_type="COSINE",
-            params={
-                "nlist": 128
-            }
+            params={"nlist": 128}
         )
         self.index_params.add_index(
             field_name="sparse_vector",
@@ -65,7 +77,6 @@ class MilvusDBManager:
         if not self.client.has_collection(self.collection_name):
             print(f"Collection '{self.collection_name}' does not exist.")
             return
-
         self.client.insert(
             collection_name=self.collection_name,
             data=data
@@ -74,9 +85,7 @@ class MilvusDBManager:
     def search(self, query_vector, limit=5, min_similarity=0.5):
         if not self.client.has_collection(self.collection_name):
             return []
-
         self.client.load_collection(self.collection_name)
-
         results = self.client.search(
             collection_name=self.collection_name,
             data=[query_vector],
@@ -88,7 +97,6 @@ class MilvusDBManager:
                 "params": {"ef": 512}
             }
         )
-
         processed_results = []
         for result in results:
             for hit in result:
@@ -98,16 +106,13 @@ class MilvusDBManager:
                         "source": hit["entity"].get("source", ""),
                         "score": hit["distance"]
                     })
-
         return processed_results
 
     def hybrid_search(self, query_vector, sparse_vector, limit=5, min_similarity=0.0):
         """混合检索：dense vector + sparse vector 使用 RRF 融合"""
         if not self.client.has_collection(self.collection_name):
             return []
-
         self.client.load_collection(self.collection_name)
-
         try:
             results = self.client.hybrid_search(
                 collection_name=self.collection_name,
@@ -133,7 +138,6 @@ class MilvusDBManager:
         except Exception as e:
             print(f"Hybrid search failed, falling back to dense search: {e}")
             return self.search(query_vector, limit=limit, min_similarity=0.0)
-
         processed_results = []
         for hits in results:
             for hit in hits:
@@ -143,7 +147,6 @@ class MilvusDBManager:
                         "source": hit["entity"].get("source", ""),
                         "score": hit["distance"]
                     })
-
         return processed_results
 
     def delete_collection(self):

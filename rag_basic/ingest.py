@@ -139,14 +139,16 @@ def clear_collection(collection_name="rag_basic"):
         dim=vectorizer.dim
     )
     db_manager.delete_collection()
-    # 也删除物理 DB 文件，确保下次 initialize() 重建 schema
-    db_file = project_root / "milvus_data" / f"{collection_name}.db"
-    if db_file.exists():
-        db_file.unlink()
-        print(f"Milvus DB 文件已删除: {db_file}")
-    lock_file = project_root / "milvus_data" / f".{collection_name}.db.lock"
-    if lock_file.exists():
-        lock_file.unlink()
+    # Docker 模式下不删除本地文件
+    milvus_host = os.environ.get("MILVUS_HOST", "")
+    if not milvus_host:
+        db_file = project_root / "milvus_data" / f"{collection_name}.db"
+        if db_file.exists():
+            db_file.unlink()
+            print(f"Milvus DB 文件已删除: {db_file}")
+        lock_file = project_root / "milvus_data" / f".{collection_name}.db.lock"
+        if lock_file.exists():
+            lock_file.unlink()
     print(f"集合 {collection_name} 已清空")
 
 
